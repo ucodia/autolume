@@ -22,6 +22,9 @@ def get_runtime_bin_dir():
 
 BIN_DIR = get_runtime_bin_dir()
 os.environ["PATH"] = BIN_DIR + os.pathsep + os.environ.get("PATH", "")
+os.environ["TORCH_EXTENSIONS_DIR"] = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "torch_extensions"
+)
 
 
 def main():

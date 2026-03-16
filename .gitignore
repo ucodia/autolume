@@ -18,6 +18,7 @@ site/
 
 # Autolume artifacts
 bin/
+torch_extensions/
 models/
 recordings/
 training-runs/
