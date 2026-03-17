@@ -6,11 +6,11 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
+import glob
 import hashlib
 import importlib
 import importlib.util
 import os
-import re
 import shutil
 import uuid
 import traceback
@@ -78,22 +78,48 @@ def _activate_msvc_env():
 
 #----------------------------------------------------------------------------
 
-def _get_mangled_gpu_name():
-    name = torch.cuda.get_device_name().lower()
-    out = []
-    for c in name:
-        if re.match('[a-z0-9_-]+', c):
-            out.append(c)
-        else:
-            out.append('-')
-    return ''.join(out)
+def _get_cuda_compute_version():
+    if not torch.cuda.is_available():
+        return None
+    return ".".join(map(str, torch.cuda.get_device_capability(torch.cuda.current_device())))
+
+def _get_cache_identifier():
+    arch_list_env = os.environ.get('TORCH_CUDA_ARCH_LIST', '').strip()
+
+    if arch_list_env:
+        arch_versions = [arch.strip() for arch in arch_list_env.split(';') if arch.strip()]
+        if arch_versions:
+            sorted_archs = sorted(arch_versions, key=lambda x: tuple(map(int, x.split('.'))))
+            return '_'.join(sorted_archs)
+
+    return _get_cuda_compute_version()
+
+def _find_compatible_cache_dir(build_top_dir, source_digest):
+    current_compute = _get_cuda_compute_version()
+
+    if current_compute is None:
+        return None
+
+    cache_pattern = os.path.join(build_top_dir, f'{source_digest}-*')
+    existing_caches = glob.glob(cache_pattern)
+
+    if not existing_caches:
+        return None
+
+    for cache_dir in existing_caches:
+        cache_suffix = os.path.basename(cache_dir).split('-', 1)[1]
+        arch_list = cache_suffix.split('_')
+        if current_compute in arch_list:
+            return cache_dir
+
+    return None
 
 #----------------------------------------------------------------------------
 # Main entry point for compiling and loading C++/CUDA plugins.
 
 _cached_plugins = dict()
 
-def get_plugin(module_name, sources, headers=None, source_dir=None, **build_kwargs):
+def get_plugin(module_name, sources, headers=None, source_dir=None, force_rebuild=False, **build_kwargs):
     assert verbosity in ['none', 'brief', 'full']
     if headers is None:
         headers = []
@@ -101,8 +127,7 @@ def get_plugin(module_name, sources, headers=None, source_dir=None, **build_kwar
         sources = [os.path.join(source_dir, fname) for fname in sources]
         headers = [os.path.join(source_dir, fname) for fname in headers]
 
-    # Already cached?
-    if module_name in _cached_plugins:
+    if not force_rebuild and module_name in _cached_plugins:
         return _cached_plugins[module_name]
 
     # Print status.
@@ -119,26 +144,6 @@ def get_plugin(module_name, sources, headers=None, source_dir=None, **build_kwar
             print('Could not find MSVC installation. Install Visual Studio Build Tools with the C++ workload.')
             return None
 
-        # Some containers set TORCH_CUDA_ARCH_LIST to a list that can either
-        # break the build or unnecessarily restrict what's available to nvcc.
-        # Unset it to let nvcc decide based on what's available on the
-        # machine.
-        os.environ['TORCH_CUDA_ARCH_LIST'] = ''
-
-        # Incremental build md5sum trickery.  Copies all the input source files
-        # into a cached build directory under a combined md5 digest of the input
-        # source files.  Copying is done only if the combined digest has changed.
-        # This keeps input file timestamps and filenames the same as in previous
-        # extension builds, allowing for fast incremental rebuilds.
-        #
-        # This optimization is done only in case all the source files reside in
-        # a single directory (just for simplicity) and if the TORCH_EXTENSIONS_DIR
-        # environment variable is set (we take this as a signal that the user
-        # actually cares about this.)
-        #
-        # EDIT: We now do it regardless of TORCH_EXTENSIOS_DIR, in order to work
-        # around the *.cu dependency bug in ninja config.
-        #
         all_source_files = sorted(sources + headers)
         all_source_dirs = set(os.path.dirname(fname) for fname in all_source_files)
         if len(all_source_dirs) == 1: # and ('TORCH_EXTENSIONS_DIR' in os.environ):
@@ -152,7 +157,13 @@ def get_plugin(module_name, sources, headers=None, source_dir=None, **build_kwar
             # Select cached build directory name.
             source_digest = hash_md5.hexdigest()
             build_top_dir = torch.utils.cpp_extension._get_build_directory(module_name, verbose=verbose_build) # pylint: disable=protected-access
-            cached_build_dir = os.path.join(build_top_dir, f'{source_digest}-{_get_mangled_gpu_name()}')
+            cache_identifier = _get_cache_identifier()
+            cached_build_dir = os.path.join(build_top_dir, f'{source_digest}-{cache_identifier}')
+
+            if not force_rebuild:
+                compatible = _find_compatible_cache_dir(build_top_dir, source_digest)
+                if compatible is not None:
+                    cached_build_dir = compatible
 
             if os.path.isdir(cached_build_dir):
                 compiled_file = None
