@@ -13,6 +13,15 @@ if %ERRORLEVEL% neq 0 (
     exit /b
 )
 
+echo Compiling custom CUDA ops for consumer archs...
+call python -m torch_utils.compile_custom_ops --arch "7.5;8.6;8.9;12.0"
+
+if %ERRORLEVEL% neq 0 (
+    echo "Error: Failed to compile custom ops"
+    pause
+    exit /b
+)
+
 echo Running PyInstaller...
 call pyinstaller main.py ^
   --name Autolume ^
@@ -31,7 +40,7 @@ call pyinstaller main.py ^
   --add-data "assets;assets" ^
   --add-data "training;training" ^
   --add-data "torch_utils;torch_utils" ^
-  --add-data "recordings;recordings" ^
+  --add-data "torch_extensions;torch_extensions" ^
   --add-data "%CONDA_PREFIX%\Lib\site-packages\clip\bpe_simple_vocab_16e6.txt.gz;clip" ^
   --add-data "%CONDA_PREFIX%\Lib\site-packages\torch\include;torch/include" ^
   --add-data "%CONDA_PREFIX%\include;include" ^
