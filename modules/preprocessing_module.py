@@ -89,7 +89,9 @@ class DataPreprocessing:
         """Preprocessing content"""
         imgui_utils.set_default_style()
         
-        # Calculate column widths
+        navbar_h = self.app.navbar_height
+        available_height = self.app.content_height - navbar_h
+
         first_column_width = self.app.content_width * 0.2
         remaining_width = self.app.content_width - first_column_width
         second_column_width = remaining_width // 2
@@ -98,8 +100,8 @@ class DataPreprocessing:
         button_width = self.app.font_size
         
         # --- Column 1: Dataset Parameter and Options ---
-        imgui.set_next_window_position(0, 0)
-        imgui.set_next_window_size(first_column_width, self.app.content_height)
+        imgui.set_next_window_position(0, navbar_h)
+        imgui.set_next_window_size(first_column_width, available_height)
         imgui.begin('Parameters##Preprocessing', closable=False, flags=(
             imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS))
         
@@ -295,7 +297,7 @@ class DataPreprocessing:
 
             imgui.spacing()
 
-            if imgui_utils.button("Back to Main Menu", width=left_popup_width - 10, enabled=True):
+            if imgui_utils.button("Close", width=left_popup_width - 10, enabled=True):
                 self.selected_video_files = []  
                 self._stop_video_thumbnail_generation()
                 # Reset cache variables when closing popup
@@ -670,17 +672,12 @@ class DataPreprocessing:
 
         imgui.spacing()
         imgui.spacing()
-        
-        imgui.separator()
-        if imgui.button("Back to Menu", width=parameter_column_width, height=30):
-            self.cleanup()
-            self.app.set_visible_menu()
 
         imgui.end()
         
         # --- Column 2: Image Thumbnails ---
-        imgui.set_next_window_position(first_column_width, 0)
-        imgui.set_next_window_size(second_column_width, self.app.content_height)
+        imgui.set_next_window_position(first_column_width, navbar_h)
+        imgui.set_next_window_size(second_column_width, available_height)
         imgui.begin('Thumbnails##Preprocessing', closable=False, flags=(
             imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS))
 
@@ -712,7 +709,7 @@ class DataPreprocessing:
         imgui.separator()
 
         # --- Scrollable Thumbnails Grid ---
-        scroll_height = self.app.content_height - 150  
+        scroll_height = available_height - 150  
         imgui.begin_child("ThumbnailsScroll", width=0, height=scroll_height, border=False)
 
         available_width = second_column_width - 35
@@ -742,8 +739,8 @@ class DataPreprocessing:
         # --- End of column 2 ---
 
         # --- Column 3: Image Preview ---
-        imgui.set_next_window_position(first_column_width + second_column_width, 0)
-        imgui.set_next_window_size(third_column_width, self.app.content_height)
+        imgui.set_next_window_position(first_column_width + second_column_width, navbar_h)
+        imgui.set_next_window_size(third_column_width, available_height)
         imgui.begin('Preview##Preprocessing', closable=False, flags=(
             imgui.WINDOW_NO_RESIZE | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_BRING_TO_FRONT_ON_FOCUS))
         
@@ -759,7 +756,7 @@ class DataPreprocessing:
 
         # Space for image preview
         preview_width = third_column_width - 25
-        preview_height = (self.app.content_height - 100)/2
+        preview_height = (available_height - 100) / 2
 
         selected_indices = self.thumbnail_widget.get_selected_indices()
         selected_file = None
